@@ -91,5 +91,5 @@ task :example do
 end
 
 task :console do
-  exec 'irb -I lib -r liquid'
+  exec 'pry -I lib -r liquid -r awesome_print'
 end
