@@ -19,9 +19,19 @@ class GraphQLUnitTest < Minitest::Test
 
       tags = variable_nodes.map { |node| node.class == Liquid::Variable ? node : find_them_tags(node.nodelist) }.flatten
 
+      def transform_tag_to_graphql(lookups)
+        attribute, *deep_attributes = lookups
+        if deep_attributes.any?
+          # warning: recursion!
+          "#{attribute} { #{transform_tag_to_graphql deep_attributes} }"
+        else
+          attribute
+        end
+      end
+
       fragments = Hash.new {|h,k| h[k] = [] }
       tags.each do |tag|
-        fragments[tag.name.name] << tag.name.lookups
+        fragments[tag.name.name] << transform_tag_to_graphql(tag.name.lookups)
       end
 
       fragments.map do |k, v|
