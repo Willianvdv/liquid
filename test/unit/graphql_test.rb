@@ -26,7 +26,6 @@ class GraphQLUnitTest < Minitest::Test
     def attributes_to_graphql(attributes)
       thing, *children = attributes
       if children.size == 1 && children[0].is_a?(Array)
-        binding.pry
         "#{thing} #{attributes_to_graphql children[0]}"
       elsif children.size > 0
         "#{thing} { #{attributes_to_graphql children} }"
@@ -97,6 +96,7 @@ fragment on #{k.capitalize} {
 
     template = %{
       <h1>Hi {{ user.name }} from {{ user.address.city }}, {{ user.address.country.iso }}</h1>
+      {{ a.b.c.d.e.f.g }}
       <ul id="products">
         {% for product in products %}
           <li>
@@ -115,12 +115,18 @@ fragment on User {
 }
       EOS
 
+    deep_nested_fragment = <<-EOS
+fragment on A {
+  b { c { d { e { f { g } } } } }
+}
+      EOS
+
     product_fragment = <<-EOS
 fragment on Product {
   name price description
 }
       EOS
-    assert_equal magic(template), [user_fragment, product_fragment]
+    assert_equal magic(template), [user_fragment, deep_nested_fragment, product_fragment]
 
   end
 end
