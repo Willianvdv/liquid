@@ -9,8 +9,6 @@ group :benchmark, :test do
 end
 
 group :test do
-  gem 'pry'
-  gem 'awesome_print'
   gem 'rubocop', '0.34.2'
 
   platform :mri do
