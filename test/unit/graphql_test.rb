@@ -39,48 +39,42 @@ fragment on Product {
     assert_equal liquid_template_to_graphql_fragments(template), [user_fragment, deep_nested_fragment, product_fragment]
   end
 
-
-
   # ---
 
+  class GraphQLThing
+    attr_reader :attribute_name, :children
 
-  class Liquid::Variable
-    def variable?
-      true
-    end
-  end
-
-
-  class Thing
-    attr_reader :thing, :children
-
-    def initialize(thing, children)
-      @thing = thing
+    def initialize(attribute_name, children)
+      @attribute_name = attribute_name
       @children = children || []
     end
 
     def merge_with(other_thing)
       @children += [other_thing.children]
-      #      children |= other_thing.children
+
       self
     end
 
     def to_graphql
-      attributes_to_graphql([thing] + children)
+      attributes_to_graphql([attribute_name] + children)
     end
 
     private
 
     def attributes_to_graphql(attributes)
-      thing, *children = attributes
+      attribute_name, *children = attributes
       if children.size == 1 && children[0].is_a?(Array)
-        "#{thing} #{attributes_to_graphql children[0]}"
+        "#{attribute_name} #{attributes_to_graphql children[0]}"
       elsif children.size > 0
-        "#{thing} { #{attributes_to_graphql children} }"
+        "#{attribute_name} { #{attributes_to_graphql children} }"
       else
-        thing
+        attribute_name
       end
     end
+  end
+
+  def transform_tag_to_graphql((attribute, *deep_attributes))
+    GraphQLThing.new attribute, deep_attributes
   end
 
   def liquid_template_to_graphql_fragments(template)
@@ -89,57 +83,42 @@ fragment on Product {
     variable_nodes = []
     tags = []
 
-    def node_and_its_child_nodes(nodelist)
-      tags = nodelist.select { |node| node.class != String }
-      tags.map do |node|
-        if node.respond_to? :nodelist
-          find_them_tags node.nodelist
-        else
-          node
-        end
-      end
-    end
-
     variable_nodes = template.root.nodelist.map do |node|
       tags << node if node.class == Liquid::Variable
 
       if node.respond_to?(:nodelist)
-        tags << node.nodelist.map do |n|
-          node_and_its_child_nodes n.nodelist
+        tags << node.nodelist.map do |child_node|
+          child_node.nodelist.select do |node|
+            node.class != String
+          end
         end
       end
     end
 
     tags.flatten!
 
-    def transform_tag_to_graphql(lookups)
-      attribute, *deep_attributes = lookups
-      Thing.new(attribute, deep_attributes)
-    end
-
-    fragments = Hash.new {|h,k| h[k] = [] }
+    fragments = {}
     tags.each do |tag|
-      existing_fragments = fragments[tag.name.name]
-      new_fragment = transform_tag_to_graphql(tag.name.lookups)
+      new_graphql_nodes = transform_tag_to_graphql(tag.name.lookups)
 
-      if existing_fragments.size > 0
+      unless (existing_graphql_nodes = fragments[tag.name.name])
+        fragments[tag.name.name] = [new_graphql_nodes,]
+      else
         merged = false
-        existing_fragments_merged_with_news = existing_fragments.map do |fragment|
-          if fragment.thing == new_fragment.thing
+        existing_graphql_nodes_merged_with_new_nodes = existing_graphql_nodes.map do |graphql_node|
+          if graphql_node.attribute_name == new_graphql_nodes.attribute_name
             merged = true
-            fragment.merge_with(new_fragment)
+            graphql_node.merge_with new_graphql_nodes
           else
-            fragment
+            graphql_node
           end
         end
 
         unless merged
-          existing_fragments_merged_with_news << new_fragment
+          existing_graphql_nodes_merged_with_new_nodes << new_graphql_nodes
         end
 
-        fragments[tag.name.name] = existing_fragments_merged_with_news
-      else
-        fragments[tag.name.name] << new_fragment
+        fragments[tag.name.name] = existing_graphql_nodes_merged_with_new_nodes
       end
     end
 
