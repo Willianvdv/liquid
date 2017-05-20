@@ -114,11 +114,11 @@ fragment on Product {
           end
         end
 
-        unless merged
-          existing_graphql_nodes_merged_with_new_nodes << new_graphql_nodes
-        end
-
-        fragments[tag.name.name] = existing_graphql_nodes_merged_with_new_nodes
+        fragments[tag.name.name] = unless merged
+                                     existing_graphql_nodes_merged_with_new_nodes << new_graphql_nodes
+                                   else
+                                     existing_graphql_nodes_merged_with_new_nodes
+                                   end
       end
     end
 
