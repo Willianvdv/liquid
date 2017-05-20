@@ -36,7 +36,7 @@ fragment on Product {
   name price description
 }
       EOS
-    assert_equal magic(template), [user_fragment, deep_nested_fragment, product_fragment]
+    assert_equal liquid_template_to_graphql_fragments(template), [user_fragment, deep_nested_fragment, product_fragment]
   end
 
 
@@ -44,11 +44,16 @@ fragment on Product {
   # ---
 
 
-
+  class Liquid::Variable
+    def variable?
+      true
+    end
+  end
 
 
   class Thing
     attr_reader :thing, :children
+
     def initialize(thing, children)
       @thing = thing
       @children = children || []
@@ -78,21 +83,34 @@ fragment on Product {
     end
   end
 
-
-  def magic(template)
+  def liquid_template_to_graphql_fragments(template)
     template = Liquid::Template.parse(template)
 
-    all_the_nodes = template.root.nodelist
-    variable_nodes = all_the_nodes.select do |node|
-      node.class < Liquid::Tag || node.class == Liquid::Variable
-    end
+    variable_nodes = []
+    tags = []
 
-    def find_them_tags(nodelist, tags=[])
+    def node_and_its_child_nodes(nodelist)
       tags = nodelist.select { |node| node.class != String }
-      tags.map { |node| node.class == Liquid::Variable ? node : find_them_tags(node.nodelist) }
+      tags.map do |node|
+        if node.respond_to? :nodelist
+          find_them_tags node.nodelist
+        else
+          node
+        end
+      end
     end
 
-    tags = variable_nodes.map { |node| node.class == Liquid::Variable ? node : find_them_tags(node.nodelist) }.flatten
+    variable_nodes = template.root.nodelist.map do |node|
+      tags << node if node.class == Liquid::Variable
+
+      if node.respond_to?(:nodelist)
+        tags << node.nodelist.map do |n|
+          node_and_its_child_nodes n.nodelist
+        end
+      end
+    end
+
+    tags.flatten!
 
     def transform_tag_to_graphql(lookups)
       attribute, *deep_attributes = lookups
@@ -101,8 +119,6 @@ fragment on Product {
 
     fragments = Hash.new {|h,k| h[k] = [] }
     tags.each do |tag|
-      #children = Hash.new {|h,k| h[k] = [] }
-
       existing_fragments = fragments[tag.name.name]
       new_fragment = transform_tag_to_graphql(tag.name.lookups)
 
