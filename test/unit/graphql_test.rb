@@ -19,27 +19,10 @@ class GraphQLUnitTest < Minitest::Test
      </ul>
     }
 
-    user_fragment = <<-EOS
-fragment on User {
-  name address { city country { iso } }
-}
-      EOS
-
-    deep_nested_fragment = <<-EOS
-fragment on A {
-  b { c { d { e { f { g } } } } }
-}
-      EOS
-
-    product_fragment = <<-EOS
-fragment on Product {
-  name price description
-}
-      EOS
     assert_equal LiquidGraphQL.new(template).fragments, [
-      user_fragment,
-      deep_nested_fragment,
-      product_fragment
+      'fragment on User { name address { city country { iso } } }',
+      'fragment on A { b { c { d { e { f { g } } } } } }',
+      'fragment on Product { name price description }',
     ]
   end
 
@@ -51,23 +34,6 @@ fragment on Product {
     end
 
     def fragments
-      liquid_template_to_graphql_fragments
-    end
-
-    private
-
-    attr_reader :template
-
-    def merge_existing_nodes_with_new_nodes(existing_nodes, new_nodes)
-      if (existing_node_with_the_same_name = existing_nodes.find { |nodes| nodes.attribute_name == new_nodes.attribute_name })
-        existing_node_with_the_same_name.merge_with new_nodes
-        existing_nodes
-      else
-        existing_nodes + [new_nodes]
-      end
-    end
-
-    def liquid_template_to_graphql_fragments
       liquid_template = Liquid::Template.parse(template)
 
       variable_nodes = []
@@ -98,11 +64,20 @@ fragment on Product {
       end
 
       fragments.map do |k, v|
-         <<-EOS
-fragment on #{k.capitalize} {
-  #{v.map(&:to_graphql).join(" ")}
-}
-      EOS
+        "fragment on #{k.capitalize} { #{v.map(&:to_graphql).join(" ")} }"
+      end
+    end
+
+    private
+
+    attr_reader :template
+
+    def merge_existing_nodes_with_new_nodes(existing_nodes, new_nodes)
+      if (existing_node_with_the_same_name = existing_nodes.find { |nodes| nodes.attribute_name == new_nodes.attribute_name })
+        existing_node_with_the_same_name.merge_with new_nodes
+        existing_nodes
+      else
+        existing_nodes + [new_nodes]
       end
     end
 
