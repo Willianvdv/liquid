@@ -3,7 +3,7 @@ require 'test_helper'
 class GraphQLUnitTest < Minitest::Test
   include Liquid
 
-  def test_to_query
+  def test_to_graphql_query
     template = %{
       <h1>Hi {{ user.name }} from {{ user.address.city }}, {{ user.address.country.iso }}</h1>
       {{ a.b.c.d.e.f.g }}
@@ -101,8 +101,8 @@ fragment on Product {
     tags.each do |tag|
       new_graphql_nodes = transform_tag_to_graphql(tag.name.lookups)
 
-      unless (existing_graphql_nodes = fragments[tag.name.name])
-        fragments[tag.name.name] = [new_graphql_nodes,]
+      nodes = unless (existing_graphql_nodes = fragments[tag.name.name])
+        [new_graphql_nodes]
       else
         merged = false
         existing_graphql_nodes_merged_with_new_nodes = existing_graphql_nodes.map do |graphql_node|
@@ -114,12 +114,14 @@ fragment on Product {
           end
         end
 
-        fragments[tag.name.name] = unless merged
-                                     existing_graphql_nodes_merged_with_new_nodes << new_graphql_nodes
-                                   else
-                                     existing_graphql_nodes_merged_with_new_nodes
-                                   end
+        nodes = unless merged
+          existing_graphql_nodes_merged_with_new_nodes << new_graphql_nodes
+        else
+          existing_graphql_nodes_merged_with_new_nodes
+        end
       end
+
+      fragments[tag.name.name] = nodes
     end
 
     fragments.map do |k, v|
