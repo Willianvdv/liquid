@@ -44,7 +44,7 @@ fragment on Product {
   class GraphQLThing
     attr_reader :attribute_name, :children
 
-    def initialize(attribute_name, children)
+    def initialize((attribute_name, *children))
       @attribute_name = attribute_name
       @children = children || []
     end
@@ -73,9 +73,14 @@ fragment on Product {
     end
   end
 
-  def transform_tag_to_graphql((attribute, *deep_attributes))
-    GraphQLThing.new attribute, deep_attributes
+def merge_existing_nodes_with_new_nodes(existing_nodes, new_nodes)
+  if (existing_node_with_the_same_name = existing_nodes.find { |nodes| nodes.attribute_name == new_nodes.attribute_name })
+    existing_node_with_the_same_name.merge_with new_nodes
+    existing_nodes
+  else
+    existing_nodes + [new_nodes]
   end
+end
 
   def liquid_template_to_graphql_fragments(template)
     template = Liquid::Template.parse(template)
@@ -86,12 +91,9 @@ fragment on Product {
     variable_nodes = template.root.nodelist.map do |node|
       tags << node if node.class == Liquid::Variable
 
-      if node.respond_to?(:nodelist)
-        tags << node.nodelist.map do |child_node|
-          child_node.nodelist.select do |node|
-            node.class != String
-          end
-        end
+      next unless node.respond_to?(:nodelist)
+      node.nodelist.inject(tags) do |new_tags, child_node|
+        new_tags << child_node.nodelist.select { |grandchild| !grandchild.is_a?(String)}
       end
     end
 
@@ -99,26 +101,12 @@ fragment on Product {
 
     fragments = {}
     tags.each do |tag|
-      new_graphql_nodes = transform_tag_to_graphql(tag.name.lookups)
+      new_graphql_nodes = GraphQLThing.new tag.name.lookups
 
-      nodes = unless (existing_graphql_nodes = fragments[tag.name.name])
-        [new_graphql_nodes]
+      nodes = if (existing_graphql_nodes = fragments[tag.name.name])
+        merge_existing_nodes_with_new_nodes(existing_graphql_nodes, new_graphql_nodes)
       else
-        merged = false
-        existing_graphql_nodes_merged_with_new_nodes = existing_graphql_nodes.map do |graphql_node|
-          if graphql_node.attribute_name == new_graphql_nodes.attribute_name
-            merged = true
-            graphql_node.merge_with new_graphql_nodes
-          else
-            graphql_node
-          end
-        end
-
-        nodes = unless merged
-          existing_graphql_nodes_merged_with_new_nodes << new_graphql_nodes
-        else
-          existing_graphql_nodes_merged_with_new_nodes
-        end
+        [new_graphql_nodes]
       end
 
       fragments[tag.name.name] = nodes
